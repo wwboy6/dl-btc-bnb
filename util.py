@@ -6,46 +6,58 @@ import matplotlib.ticker as ticker
 import numpy as np
 
 def fetchHistoricalData(symbol, start_date, end_date, interval='1d'):
-    # Binance API endpoint for historical candlestick data
-    url = "https://api.binance.com/api/v3/klines"
-    
+  # Binance API endpoint for historical candlestick data
+  url = "https://api.binance.com/api/v3/klines"
+  data = []
+
+  start_timestamp = int(start_date.timestamp() * 1000)
+  end_timestamp = int(end_date.timestamp() * 1000)
+  
+  while start_timestamp < end_timestamp:
     # Set the parameters for the API request
     params = {
-        'symbol': symbol,  # BNB against USDT
-        'interval': interval,     # Daily interval
-        'startTime': int(start_date.timestamp() * 1000),
-        'endTime': int(end_date.timestamp() * 1000),
+      'symbol': symbol,  # BNB against USDT
+      'interval': interval,     # Daily interval
+      'startTime': start_timestamp,
+      'endTime': end_timestamp,
     }
     
     # Make the API request
     response = requests.get(url, params=params)
     
     if response.status_code != 200:
-        print(f"Error fetching data: {response.status_code}")
-        return None
+      print(f"Error fetching data: {response.status_code}")
+      return None
     
     # Parse the response data
-    data = response.json()
-    
-    # Create a DataFrame to store the data
-    df = pd.DataFrame(data, columns=[
-        'Open Time', 'Open', 'High', 'Low', 'Close', 'Volume',
-        'Close Time', 'Quote Asset Volume', 'Number of Trades',
-        'Taker Buy Base Asset Volume', 'Taker Buy Quote Asset Volume', 'Ignore'
-    ])
-    
-    # Convert timestamps to readable dates
-    df['Open Time'] = pd.to_datetime(df['Open Time'], unit='ms')
-    df['Close Time'] = pd.to_datetime(df['Close Time'], unit='ms')
-    df['Open'] = pd.to_numeric(df['Open'], errors='coerce')
-    df['High'] = pd.to_numeric(df['High'], errors='coerce')
-    df['Low'] = pd.to_numeric(df['Low'], errors='coerce')
-    df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
+    sub_data = response.json()
+    if not data:
+      break
+    print(f"Fetched {len(sub_data)} rows")
+    data.extend(sub_data)
+    # data may not be fully fetched
+    # check the last start date and fetch it again from next day
+    start_date = pd.to_datetime(sub_data[-1]['Open Time'])
+    # increate start_date by 1 day
+    start_date += pd.Timedelta(days=1)
+    start_timestamp = start_date.timestamp() * 1000
+  
+  print(f"Fetched {len(data)} rows")
 
-    # Select relevant columns
-    df = df[['Open Time', 'Open', 'High', 'Low', 'Close', 'Volume']]
-    
-    return df
+  # Create a DataFrame to store the data
+  df = pd.DataFrame(data, columns=[
+    'Open Time', 'Open', 'High', 'Low', 'Close', 'Volume'
+  ])
+  
+  # Convert timestamps to readable dates
+  df['Open Time'] = pd.to_datetime(df['Open Time'], unit='ms')
+  # Convert string to numeric
+  df['Open'] = pd.to_numeric(df['Open'], errors='coerce')
+  df['High'] = pd.to_numeric(df['High'], errors='coerce')
+  df['Low'] = pd.to_numeric(df['Low'], errors='coerce')
+  df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
+
+  return df
 
 def plotPriceDatas(df, title):
   plt.figure(figsize=(14, 7))
@@ -60,6 +72,7 @@ def plotPriceDatas(df, title):
   plt.legend()
   plt.grid()
   ax = plt.gca()
+  ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=8))
   ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=6))
 
 def prepareTrainingInputs(data, windowSize, testSize):
