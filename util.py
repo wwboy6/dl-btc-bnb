@@ -103,6 +103,14 @@ def prepareTestingOutputs(data, testSize):
   testInputs = np.array(data[indexGenerator])
   return testInputs
 
+def prepareDatasForSeriesModelTraining(inputData, outputData, windowSize, testSize, batch_size=1024):
+  x_train = prepareTrainingInputs(inputData, windowSize, testSize)
+  y_train = prepareTraingingOutputs(outputData, windowSize, testSize)
+  x_test = prepareTestingInputs(inputData, windowSize, testSize)
+  y_test = prepareTestingOutputs(outputData, testSize)
+  train_dataset, test_dataset = prepareDataSetFromArray(x_train, y_train, x_test, y_test, batch_size)
+  return x_train, y_train, x_test, y_test, train_dataset, test_dataset
+
 def prepareDataSetFromArray(x_train, y_train, x_test, y_test, batch_size=1024):
   train_features_dataset = tf.data.Dataset.from_tensor_slices(x_train)
   train_labels_dataset = tf.data.Dataset.from_tensor_slices(y_train)
@@ -117,9 +125,43 @@ def prepareDataSetFromArray(x_train, y_train, x_test, y_test, batch_size=1024):
 
   return train_dataset, test_dataset
 
+def standardTrainingAndReport(model, x_test, y_test, train_dataset, test_dataset):
+  model.compile(loss="mae",
+                optimizer=tf.keras.optimizers.Adam(0.001),
+                metrics=["mae", "mse"])
+  history = model.fit(train_dataset,
+            epochs=5000, # just a large number
+            validation_data=test_dataset,
+            verbose=0, # prevent large amounts of training outputs
+            callbacks=[tf.keras.callbacks.EarlyStopping(monitor="val_loss", patience=200, restore_best_weights=True),
+                      tf.keras.callbacks.ReduceLROnPlateau(monitor="val_loss", patience=100, verbose=1)])
+  plotHistoryRSME(history)
+  rmse = np.sqrt(model.evaluate(x_test, y_test)[2])
+  print(f"rmse: {rmse}")
+  # plot prediction
+  prediction = model.predict(x_test)
+  plt.figure(figsize=(12,5))
+  plt.plot(prediction, label='Prediction')
+  plt.plot(y_test, label='actual')
+  plt.title('Prediction vs actual')
+  plt.legend()
+  corr = np.corrcoef(prediction.reshape(-1), y_test)[0, 1] 
+  print(f"corr: {corr}")
+  return history, rmse, corr
+
+
 def plotHistoryRSME(history, lastEpoch=150): 
   rmse = np.sqrt(history.history['val_mse'])
+  plt.figure(figsize=(12,5))
   plt.plot(rmse[-lastEpoch:-1], label="val rmse")
   plt.plot(np.sqrt(history.history['mse'])[-lastEpoch:-1], label="train rmse")
   plt.title("Root mean squared error in log scale")
   plt.legend()
+  plt.yscale("log")
+
+def covertToLogScale(data):
+  return np.array([np.log(abs(v) + 1)*np.sign(v) for v in data])
+
+def plotBarColoredSign(data):
+  colors = ['green' if value > 0 else 'red' for value in data]
+  plt.bar(range(len(data)), data, color=colors)
