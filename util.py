@@ -125,19 +125,18 @@ def prepareDataSetFromArray(x_train, y_train, x_test, y_test, batch_size=1024):
 
   return train_dataset, test_dataset
 
-def standardTrainingAndReport(model, x_test, y_test, train_dataset, test_dataset):
-  model.compile(loss="mae",
-                optimizer=tf.keras.optimizers.Adam(0.001),
-                metrics=["mae", "mse"])
+def standardTrainingAndReport(model, x_test, y_test, train_dataset, test_dataset, early_stopping_patience=20, reduce_lr_patience=5, plotHistoryLastEpoch=0):
+  early_stopping = tf.keras.callbacks.EarlyStopping(monitor="val_loss", patience=early_stopping_patience, restore_best_weights=True, verbose=1)
   history = model.fit(train_dataset,
             epochs=5000, # just a large number
             validation_data=test_dataset,
             verbose=0, # prevent large amounts of training outputs
-            callbacks=[tf.keras.callbacks.EarlyStopping(monitor="val_loss", patience=200, restore_best_weights=True),
-                      tf.keras.callbacks.ReduceLROnPlateau(monitor="val_loss", patience=100, verbose=1)])
-  plotHistoryRSME(history)
-  rmse = np.sqrt(model.evaluate(x_test, y_test)[2])
-  print(f"rmse: {rmse}")
+            callbacks=[early_stopping,
+                      tf.keras.callbacks.ReduceLROnPlateau(monitor="val_loss", patience=reduce_lr_patience, verbose=1)])
+  print(f"Early stopping restore at {early_stopping.best_epoch} epochs")
+  plotHistoryRSME(history, plotHistoryLastEpoch)
+  loss = np.sqrt(model.evaluate(x_test, y_test)[0])
+  print(f"loss: {loss}")
   # plot prediction
   prediction = model.predict(x_test)
   plt.figure(figsize=(12,5))
@@ -147,10 +146,10 @@ def standardTrainingAndReport(model, x_test, y_test, train_dataset, test_dataset
   plt.legend()
   corr = np.corrcoef(prediction.reshape(-1), y_test)[0, 1] 
   print(f"corr: {corr}")
-  return history, rmse, corr
+  return history, loss, corr
 
 
-def plotHistoryRSME(history, lastEpoch=150): 
+def plotHistoryRSME(history, lastEpoch=0): 
   rmse = np.sqrt(history.history['val_mse'])
   plt.figure(figsize=(12,5))
   plt.plot(rmse[-lastEpoch:-1], label="val rmse")
