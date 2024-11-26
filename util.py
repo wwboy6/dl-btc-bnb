@@ -133,7 +133,6 @@ def standardTrainingAndReport(model, x_test, y_test, train_dataset, test_dataset
             verbose=0, # prevent large amounts of training outputs
             callbacks=[early_stopping,
                       tf.keras.callbacks.ReduceLROnPlateau(monitor="val_loss", patience=reduce_lr_patience, verbose=1)])
-  print(f"Early stopping restore at {early_stopping.best_epoch} epochs")
   plotHistoryRSME(history, plotHistoryLastEpoch)
   loss = np.sqrt(model.evaluate(x_test, y_test)[0])
   print(f"loss: {loss}")
@@ -144,10 +143,34 @@ def standardTrainingAndReport(model, x_test, y_test, train_dataset, test_dataset
   plt.plot(y_test, label='actual')
   plt.title('Prediction vs actual')
   plt.legend()
-  corr = np.corrcoef(prediction.reshape(-1), y_test)[0, 1] 
+  corr = np.corrcoef(prediction.reshape(-1), y_test.reshape(-1))[0, 1]  
   print(f"corr: {corr}")
   return history, loss, corr
 
+def noValidationTrainingAndReport(model, x_test, y_test, train_dataset, epochs=50,plotHistoryLastEpoch=0):
+  history = model.fit(train_dataset,
+            epochs=epochs,
+            verbose=0, # prevent large amounts of training outputs
+            )
+  # plotHistoryRSME(history, plotHistoryLastEpoch)
+  plt.figure(figsize=(12,5))
+  plt.plot(np.sqrt(history.history['mse'])[-plotHistoryLastEpoch:-1], label="train rmse")
+  plt.title("Root mean squared error in log scale")
+  plt.legend()
+  plt.yscale("log")
+  #
+  loss = np.sqrt(model.evaluate(x_test, y_test)[0])
+  print(f"loss: {loss}")
+  # plot prediction
+  prediction = model.predict(x_test)
+  plt.figure(figsize=(12,5))
+  plt.plot(prediction, label='Prediction')
+  plt.plot(y_test, label='actual')
+  plt.title('Prediction vs actual')
+  plt.legend()
+  corr = np.corrcoef(prediction.reshape(-1), y_test.reshape(-1))[0, 1] 
+  print(f"corr: {corr}")
+  return history, loss, corr
 
 def plotHistoryRSME(history, lastEpoch=0): 
   rmse = np.sqrt(history.history['val_mse'])
@@ -164,3 +187,6 @@ def covertToLogScale(data):
 def plotBarColoredSign(data):
   colors = ['green' if value > 0 else 'red' for value in data]
   plt.bar(range(len(data)), data, color=colors)
+
+def computeProfitOfFuture(data, future_period):
+  return np.array([data[i+future_period] - data[i] for i in range(len(data)-future_period)])
