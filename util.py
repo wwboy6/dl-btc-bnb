@@ -111,13 +111,15 @@ def prepareDatasForSeriesModelTraining(inputData, outputData, windowSize, testSi
   train_dataset, test_dataset = prepareDataSetFromArray(x_train, y_train, x_test, y_test, batch_size)
   return x_train, y_train, x_test, y_test, train_dataset, test_dataset
 
-def prepareDataSetFromArray(x_train, y_train, x_test, y_test, batch_size=1024):
+def prepareDataSetFromArray(x_train, y_train, x_test, y_test, shuffle=False, batch_size=1024):
   train_features_dataset = tf.data.Dataset.from_tensor_slices(x_train)
   train_labels_dataset = tf.data.Dataset.from_tensor_slices(y_train)
   test_features_dataset = tf.data.Dataset.from_tensor_slices(x_test)
   test_labels_dataset = tf.data.Dataset.from_tensor_slices(y_test)
 
   train_dataset = tf.data.Dataset.zip((train_features_dataset, train_labels_dataset))
+  if shuffle:
+    train_dataset = train_dataset.shuffle(buffer_size=1024)
   test_dataset = tf.data.Dataset.zip((test_features_dataset, test_labels_dataset))
 
   train_dataset = train_dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
@@ -185,6 +187,7 @@ def covertToLogScale(data):
   return np.array([np.log(abs(v) + 1)*np.sign(v) for v in data])
 
 def plotBarColoredSign(data):
+  data = data.reshape(-1)
   colors = ['green' if value > 0 else 'red' for value in data]
   plt.bar(range(len(data)), data, color=colors)
 
