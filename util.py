@@ -127,14 +127,15 @@ def prepareDataSetFromArray(x_train, y_train, x_test, y_test, shuffle=False, bat
 
   return train_dataset, test_dataset
 
-def standardTrainingAndReport(model, x_test, y_test, train_dataset, test_dataset, early_stopping_patience=20, reduce_lr_patience=5, plotHistoryLastEpoch=0):
-  early_stopping = tf.keras.callbacks.EarlyStopping(monitor="val_loss", patience=early_stopping_patience, restore_best_weights=True, verbose=1)
+def standardTrainingAndReport(model, x_test, y_test, train_dataset, test_dataset, early_stopping_patience=20, early_stopping_restore_best_weights=True, reduce_lr_patience=5, plotHistoryLastEpoch=0):
   history = model.fit(train_dataset,
             epochs=5000, # just a large number
             validation_data=test_dataset,
             verbose=0, # prevent large amounts of training outputs
-            callbacks=[early_stopping,
-                      tf.keras.callbacks.ReduceLROnPlateau(monitor="val_loss", patience=reduce_lr_patience, verbose=1)])
+            callbacks=[
+              tf.keras.callbacks.EarlyStopping(monitor="val_loss", patience=early_stopping_patience, restore_best_weights=early_stopping_restore_best_weights, verbose=1),
+              tf.keras.callbacks.ReduceLROnPlateau(monitor="val_loss", patience=reduce_lr_patience, verbose=1)
+            ])
   plotHistoryRSME(history, plotHistoryLastEpoch)
   loss = np.sqrt(model.evaluate(x_test, y_test)[0])
   print(f"loss: {loss}")
