@@ -3,7 +3,10 @@ import requests
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+from matplotlib.collections import LineCollection
+from matplotlib.colors import LinearSegmentedColormap, Normalize
 import numpy as np
+
 
 def fetchHistoricalData(symbol, start_date, end_date, interval='1d'):
   # Binance API endpoint for historical candlestick data
@@ -194,3 +197,127 @@ def plotBarColoredSign(data):
 
 def computeProfitOfFuture(data, future_period):
   return np.array([data[i+future_period] - data[i] for i in range(len(data)-future_period)])
+
+# resample data pair so that the amount of positive y_train would be the same as negative
+def undersampleSeriesDataTomekBySign(x, y):
+  dataCount = len(y)
+  assert(dataCount == len(x))
+  # get the amount of positive and negative samples
+  posDeterminer = lambda v: v > 0
+  negDeterminer = lambda v: v < 0
+  posCount = len(y[posDeterminer(y)])
+  negCount = len(y[negDeterminer(y)])
+  if (posCount == negCount):
+    return x, y
+  isFilteringPosCount = posCount > negCount
+  if isFilteringPosCount:
+    filteringDeterminer = posDeterminer
+  else:
+    filteringDeterminer = negDeterminer
+  # undersample the data with determiner until the amount of positive and negative samples are the same
+  lastIndex = 0
+  while posCount != negCount:
+    # get the index of the first element that should be filtered, and it is next to another index that should not be filtered
+    index = next((i+lastIndex for i, yy in enumerate(y[lastIndex:]) if (filteringDeterminer(yy) and (
+      (not filteringDeterminer(y[max(0, i+lastIndex-1)])) or (not filteringDeterminer(y[min(dataCount-1, i+lastIndex+1)]))
+    ))), None)
+    if index is None:
+      if (lastIndex == 0):
+        raise Exception("No element can be filtered")
+      lastIndex = 0
+      continue
+    # remove the element at the index
+    x = np.delete(x, index, axis=0)
+    y = np.delete(y, index, axis=0)
+    # update the counters
+    if isFilteringPosCount:
+      posCount -= 1
+    else:
+      negCount -= 1
+    dataCount -= 1
+    lastIndex = index
+    # avoid removing same group again
+    if lastIndex == 0 or not filteringDeterminer(y[lastIndex - 1]):
+      lastIndex = (lastIndex + 1) % dataCount
+  return x, y
+
+def rescaleOneValueBySign(v, y_pos_scale, y_neg_scale):
+  if v > 0:
+    return v / (y_pos_scale)
+  else:
+    return v / (y_neg_scale)
+
+def rescalingBySign(y):
+  y_pos_mean = np.mean(y[y>0])
+  y_neg_mean = -np.mean(y[y<0])
+  print(f"y_pos_mean: {y_pos_mean}")
+  print(f"y_neg_mean: {y_neg_mean}")
+  scale_target = min(y_pos_mean, y_neg_mean)
+  print(f"scale_target: {scale_target}")
+  y_pos_scale = y_pos_mean / scale_target
+  y_neg_scale = y_neg_mean / scale_target
+  return np.array([rescaleOneValueBySign(v, y_pos_scale, y_neg_scale) for v in y])
+
+def computeUDNTrend(data, ut_target, dt_target, nt_target, scaling):
+  data_count = len(data)
+  zeros = np.zeros(data_count)
+  up_trend = 1-np.tanh(np.max([ut_target - data, zeros], axis=0) * scaling)
+  down_trend = 1-np.tanh(np.max([data - dt_target, zeros], axis=0) * scaling)
+  neutral_trend = 1 - np.tanh(np.max([np.abs(data) - nt_target, zeros], axis=0) * scaling)
+  return up_trend, down_trend, neutral_trend
+
+def colored_line(x, y, c, **lc_kwargs):
+  # Default the capstyle to butt so that the line segments smoothly line up
+  default_kwargs = {"capstyle": "butt"}
+  default_kwargs.update(lc_kwargs)
+  # Compute the midpoints of the line segments. Include the first and last points
+  # twice so we don't need any special syntax later to handle them.
+  x = np.asarray(x)
+  y = np.asarray(y)
+  x_midpts = np.hstack((x[0], 0.5 * (x[1:] + x[:-1]), x[-1]))
+  y_midpts = np.hstack((y[0], 0.5 * (y[1:] + y[:-1]), y[-1]))
+  # Determine the start, middle, and end coordinate pair of each line segment.
+  # Use the reshape to add an extra dimension so each pair of points is in its
+  # own list. Then concatenate them to create:
+  # [
+  #   [(x1_start, y1_start), (x1_mid, y1_mid), (x1_end, y1_end)],
+  #   [(x2_start, y2_start), (x2_mid, y2_mid), (x2_end, y2_end)],
+  #   ...
+  # ]
+  coord_start = np.column_stack((x_midpts[:-1], y_midpts[:-1]))[:, np.newaxis, :]
+  coord_mid = np.column_stack((x, y))[:, np.newaxis, :]
+  coord_end = np.column_stack((x_midpts[1:], y_midpts[1:]))[:, np.newaxis, :]
+  segments = np.concatenate((coord_start, coord_mid, coord_end), axis=1)
+  lc = LineCollection(segments, **default_kwargs)
+  lc.set_array(c)  # set the colors of each segment
+  return lc
+
+def drawHorizontalColoredBar(fig, ax, data, yOffset, cmap, linewidth, label, norm=Normalize(vmin=0, vmax=1), drawColorBar=True):
+  dataSize = len(data)
+  x = [i for i in range(0, dataSize)]
+  y = np.zeros(dataSize) + yOffset
+  # Create a Normalize object to fix the color scale
+  lines = colored_line(x, y, data, linewidth=linewidth, cmap=cmap, norm=norm)
+  sm = ax.add_collection(lines)
+  if drawColorBar:
+    fig.colorbar(sm, label=label, orientation='vertical', fraction=0.02, pad=0.04, shrink=1)
+
+def drawBarsForTrends(fig, ax, up_trend_train, down_trend_train, neutral_trend_train, ut_target, norm=Normalize(vmin=0, vmax=1), drawColorBar=True):
+  colors = [
+      (0, 1, 0, 0),    # Transparent (RGBA)
+      (0, 1, 0, 0.5)   # Green with 50% transparency (RGBA)
+  ]
+  cmap = LinearSegmentedColormap.from_list("transparent_to_green", colors, N=256)
+  drawHorizontalColoredBar(fig, ax, up_trend_train, ut_target, cmap, 80, 'up trend', norm=norm, drawColorBar=drawColorBar)
+  colors = [
+      (1, 0, 0, 0),    # Transparent (RGBA)
+      (1, 0, 0, 0.5)   # Red with 50% transparency (RGBA)
+  ]
+  cmap = LinearSegmentedColormap.from_list("transparent_to_red", colors, N=256)
+  drawHorizontalColoredBar(fig, ax, down_trend_train, -ut_target, cmap, 80, 'down trend', norm=norm, drawColorBar=drawColorBar)
+  colors = [
+      (1, 1, 0, 0),    # Transparent (RGBA)
+      (1, 1, 0, 0.5)   # Yellow with 50% transparency (RGBA)
+  ]
+  cmap = LinearSegmentedColormap.from_list("transparent_to_yellow", colors, N=256)
+  drawHorizontalColoredBar(fig, ax, neutral_trend_train, 0, cmap, 80, 'neutral', norm=norm, drawColorBar=drawColorBar)
