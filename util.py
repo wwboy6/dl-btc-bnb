@@ -153,7 +153,7 @@ def standardTrainingAndReport(model, x_test, y_test, train_dataset, test_dataset
   print(f"corr: {corr}")
   return history, loss, corr
 
-def noValidationTrainingAndReport(model, x_test, y_test, train_dataset, epochs=50,plotHistoryLastEpoch=0):
+def noValidationTrainingAndReport(model, x_test, y_test, train_dataset, epochs=50, plotGraph=True, plotHistoryLastEpoch=0):
   history = model.fit(train_dataset,
             epochs=epochs,
             verbose=0, # prevent large amounts of training outputs
@@ -168,12 +168,13 @@ def noValidationTrainingAndReport(model, x_test, y_test, train_dataset, epochs=5
   loss = np.sqrt(model.evaluate(x_test, y_test)[0])
   print(f"loss: {loss}")
   # plot prediction
-  prediction = model.predict(x_test)
-  plt.figure(figsize=(12,5))
-  plt.plot(prediction, label='Prediction')
-  plt.plot(y_test, label='actual')
-  plt.title('Prediction vs actual')
-  plt.legend()
+  if plotGraph:
+    prediction = model.predict(x_test)
+    plt.figure(figsize=(12,5))
+    plt.plot(prediction, label='Prediction')
+    plt.plot(y_test, label='actual')
+    plt.title('Prediction vs actual')
+    plt.legend()
   corr = np.corrcoef(prediction.reshape(-1), y_test.reshape(-1))[0, 1] 
   print(f"corr: {corr}")
   return history, loss, corr
