@@ -130,7 +130,7 @@ def prepareDataSetFromArray(x_train, y_train, x_test, y_test, shuffle=False, bat
 
   return train_dataset, test_dataset
 
-def standardTrainingAndReport(model, x_test, y_test, train_dataset, test_dataset, early_stopping_patience=20, early_stopping_restore_best_weights=True, reduce_lr_patience=5, plotHistoryLastEpoch=0):
+def standardTrainingAndReport(model, x_test, y_test, train_dataset, test_dataset, early_stopping_patience=10, early_stopping_restore_best_weights=True, reduce_lr_patience=5, plotHistoryLastEpoch=0):
   history = model.fit(train_dataset,
             epochs=5000, # just a large number
             validation_data=test_dataset,
