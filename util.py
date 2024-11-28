@@ -159,17 +159,18 @@ def noValidationTrainingAndReport(model, x_test, y_test, train_dataset, epochs=5
             verbose=0, # prevent large amounts of training outputs
             )
   # plotHistoryRSME(history, plotHistoryLastEpoch)
-  plt.figure(figsize=(12,5))
-  plt.plot(np.sqrt(history.history['mse'])[-plotHistoryLastEpoch:-1], label="train rmse")
-  plt.title("Root mean squared error in log scale")
-  plt.legend()
-  plt.yscale("log")
+  if plotGraph:
+    plt.figure(figsize=(12,5))
+    plt.plot(np.sqrt(history.history['mse'])[-plotHistoryLastEpoch:-1], label="train rmse")
+    plt.title("Root mean squared error in log scale")
+    plt.legend()
+    plt.yscale("log")
   #
   loss = np.sqrt(model.evaluate(x_test, y_test)[0])
   print(f"loss: {loss}")
+  prediction = model.predict(x_test)
   # plot prediction
   if plotGraph:
-    prediction = model.predict(x_test)
     plt.figure(figsize=(12,5))
     plt.plot(prediction, label='Prediction')
     plt.plot(y_test, label='actual')
